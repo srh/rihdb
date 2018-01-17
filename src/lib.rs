@@ -1,3 +1,18 @@
+
+//! NihDB - The thirst quencher
+//! 
+//! ```
+//! use nihdb::Store;
+//! let dir = "./testdir-nihdb/".to_string();
+//! Store::create(&dir).unwrap();
+//! let mut store: Store = Store::open(&dir, 100).unwrap();
+//! 
+//! store.put( "some_key".as_bytes(), "Some Value".as_bytes() ).unwrap();
+//! let retrieved_string = String::from_utf8( store.get( "some_key".as_bytes() ).unwrap().unwrap() ).unwrap();
+//! println!("The value is {}", retrieved_string );
+//! std::fs::remove_dir_all(&dir).unwrap();
+//! ```
+
 use std::collections::Bound;
 use std::iter::*;
 
@@ -35,6 +50,7 @@ pub struct StoreIter<'a> {
 }
 
 impl Store {
+    /// Initialize the store directory and create the table of contents
     pub fn create(dir: &str) -> Result<()> {
         // NOTE: We'll want directory locking and such.
         std::fs::create_dir(dir)?;
@@ -42,13 +58,12 @@ impl Store {
         return Ok(());
     }
 
+    /// Open the store
+    /// 
+    /// `threshold` is the number of put operations which the write cache must have prior to committing to disk
     pub fn open(dir: &str, threshold: usize) -> Result<Store> {
         let (toc_file, toc) = read_toc(dir)?;
         return Ok(Store::make_existing(threshold, dir.to_string(), toc_file, toc, MemStore::new()));
-    }
-
-    pub fn make(threshold: usize, directory: String, toc_file: std::fs::File, toc: Toc) -> Store {
-        return Store::make_existing(threshold, directory, toc_file, toc, MemStore::new());
     }
 
     fn make_existing(threshold: usize, directory: String, toc_file: std::fs::File, toc: Toc, ms: MemStore) -> Store {
@@ -62,6 +77,9 @@ impl Store {
         }
     }
 
+    /// insert a key/value pair into the store if the key is not already present in the store
+    /// If the key is already present, the operation is aborted, and false is returned
+    /// `insert` is the exact inverse of [`replace`]: #tymethod.replace
     pub fn insert(&mut self, key: &[u8], val: &[u8]) -> Result<bool> {
         if !self.exists(key)? {
             self.put(key, val)?;
@@ -70,6 +88,9 @@ impl Store {
         return Ok(false);
     }
 
+    /// insert a key/value pair into the store if the key IS already present in the store
+    /// If the key is NOT already present, the operation is aborted, and false is returned.
+    /// `replace` is the exact inverse of [`insert`]: #tymethod.insert
     pub fn replace(&mut self, key: &[u8], val: &[u8]) -> Result<bool> {
         if self.exists(key)? {
             self.put(key, val)?;
@@ -78,11 +99,15 @@ impl Store {
         return Ok(false);
     }
 
+    /// Put a key/value pair into the store regardless if whether it is already present.
+    /// If the key is already present in the store, overwrite it.
+    /// Compare to [`insert`]: #tymethod.insert or [`replace`]: #tymethod.replace
     pub fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
         self.memstores[0].apply(key.to_vec(), Mutation::Set(val.to_vec()));
         return self.consider_split();
     }
 
+    /// Remove a key/value pair from the store. Returns true if the value was present, otherwise false
     pub fn remove(&mut self, key: &[u8]) -> Result<bool> {
         if self.exists(key)? {
             self.memstores[0].apply(key.to_vec(), Mutation::Delete);

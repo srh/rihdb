@@ -1,4 +1,6 @@
-NIHdb
+[![Build Status](https://travis-ci.org/srh/nihdb.svg?branch=master)](https://travis-ci.org/srh/nihdb)
+
+# NIHdb
 
 A simple single-threaded KV store, with read/write/range-get operations.
 
